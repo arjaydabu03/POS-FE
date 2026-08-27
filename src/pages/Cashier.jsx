@@ -19,7 +19,7 @@ import {
 import React, { useState, useEffect, useMemo, useRef } from "react";
 
 import {
-  useProductsQuery,
+  usePosProductsQuery,
   useTransactionQuery,
   useCreateTransactionMutation,
   useUpdateTransactionMutation,
@@ -35,6 +35,7 @@ function makeLine(product) {
     category: product.category,
     unit_of_measurement: product.unit_of_measurement,
     price: Number(product.selling_price ?? 0),
+    available_quantity: Number(product.available_quantity ?? 0),
     qty: 1,
   };
 }
@@ -84,6 +85,30 @@ function Cashier() {
   const [cashTendered, setCashTendered] = useState("");
 
   // ---------------------------------------------------------
+  // ALERTS
+  // ---------------------------------------------------------
+
+  const [alertState, setAlertState] = useState({
+    isOpen: false,
+    severity: "success",
+    message: "",
+  });
+
+  useEffect(() => {
+    if (alertState.isOpen) {
+      const timer = setTimeout(
+        () => setAlertState((prev) => ({ ...prev, isOpen: false })),
+        3000,
+      );
+      return () => clearTimeout(timer);
+    }
+  }, [alertState.isOpen]);
+
+  const notify = (severity, message) => {
+    setAlertState({ isOpen: true, severity, message });
+  };
+
+  // ---------------------------------------------------------
   // PRODUCTS (server-side search + real pagination)
   // ---------------------------------------------------------
 
@@ -94,14 +119,17 @@ function Cashier() {
     setPage(1);
   }, [debouncedSearch, category]);
 
-  const { data: productsData, isFetching: isProductsFetching } =
-    useProductsQuery({
-      status: "active",
-      search: debouncedSearch || undefined,
-      category: category || undefined,
-      page,
-      per_page: PAGE_SIZE,
-    });
+  const {
+    data: productsData,
+    isFetching: isProductsFetching,
+    refetch: refetchProducts,
+  } = usePosProductsQuery({
+    status: "active",
+    search: debouncedSearch || undefined,
+    category: category || undefined,
+    page,
+    per_page: PAGE_SIZE,
+  });
 
   // Defensive extraction — adjust once you confirm your API's real
   // response shape via console.log(productsData). Handles both
@@ -128,11 +156,12 @@ function Cashier() {
   // Swap for a dedicated lightweight endpoint (e.g. GET /products/categories)
   // once available — this is the one remaining heavy call.
 
-  const { data: categoriesData } = useProductsQuery({
-    status: "active",
-    pagination: "none",
-    fields: "category",
-  });
+  const { data: categoriesData, refetch: refetchCategories } =
+    usePosProductsQuery({
+      status: "active",
+      pagination: "none",
+      fields: "category",
+    });
 
   const categories = useMemo(() => {
     const rows = Array.isArray(categoriesData?.data)
@@ -148,12 +177,27 @@ function Cashier() {
   // ---------------------------------------------------------
 
   const addToCart = (product) => {
+    const available = Number(product.available_quantity ?? 0);
+
+    if (available <= 0) {
+      notify("error", `${product.item_description} is out of stock.`);
+      return;
+    }
+
     setCart((prev) => {
       const existing = prev.find(
         (line) => line.item_code === product.item_code,
       );
 
       if (existing) {
+        if (existing.qty >= existing.available_quantity) {
+          notify(
+            "error",
+            `Only ${existing.available_quantity} ${existing.item_description} in stock.`,
+          );
+          return prev;
+        }
+
         return prev.map((line) =>
           line.item_code === product.item_code
             ? {
@@ -171,14 +215,24 @@ function Cashier() {
   const changeQty = (item_code, delta) => {
     setCart((prev) =>
       prev
-        .map((line) =>
-          line.item_code === item_code
-            ? {
-                ...line,
-                qty: line.qty + delta,
-              }
-            : line,
-        )
+        .map((line) => {
+          if (line.item_code !== item_code) return line;
+
+          const nextQty = line.qty + delta;
+
+          if (delta > 0 && nextQty > line.available_quantity) {
+            notify(
+              "error",
+              `Only ${line.available_quantity} ${line.item_description} in stock.`,
+            );
+            return line;
+          }
+
+          return {
+            ...line,
+            qty: nextQty,
+          };
+        })
         .filter((line) => line.qty > 0),
     );
   };
@@ -217,6 +271,10 @@ function Cashier() {
 
   const insufficientCash = cashTendered !== "" && cashAmount < total;
 
+  // Any line in the cart that (somehow) exceeds available stock —
+  // e.g. stock dropped after the item was already added to the cart.
+  const hasStockIssue = cart.some((line) => line.qty > line.available_quantity);
+
   // ---------------------------------------------------------
   // CASH INPUT
   // ---------------------------------------------------------
@@ -246,6 +304,15 @@ function Cashier() {
   const stageCharge = () => {
     if (cart.length === 0) return;
     if (cashAmount < total) return;
+
+    if (hasStockIssue) {
+      notify(
+        "error",
+        "One or more items in the order exceed available stock. Please adjust quantities.",
+      );
+      return;
+    }
+
     setPendingCharge(true);
   };
 
@@ -265,13 +332,13 @@ function Cashier() {
     try {
       await createTransaction(payload).unwrap();
 
-      setAlertState({
-        isOpen: true,
-        severity: "success",
-        message: "Successfully Paid",
-      });
+      notify("success", "Successfully Paid");
 
       clearCart();
+
+      // Refresh item list so available_quantity reflects this sale
+      refetchProducts();
+      refetchCategories();
     } catch (err) {
       const firstError = err?.data?.errors?.item_code;
       const message =
@@ -279,30 +346,11 @@ function Cashier() {
         firstError?.[1] ??
         "Something went wrong while processing this transaction.";
 
-      setAlertState({
-        isOpen: true,
-        severity: "error",
-        message: message,
-      });
+      notify("error", message);
     } finally {
       setPendingCharge(false);
     }
   };
-
-  const [alertState, setAlertState] = useState({
-    isOpen: false,
-    severity: "success",
-    message: "",
-  });
-  useEffect(() => {
-    if (alertState.isOpen) {
-      const timer = setTimeout(
-        () => setAlertState((prev) => ({ ...prev, isOpen: false })),
-        3000,
-      );
-      return () => clearTimeout(timer);
-    }
-  }, [alertState.isOpen]);
 
   // ---------------------------------------------------------
   // UI
@@ -415,42 +463,65 @@ function Cashier() {
               </div>
             ) : (
               <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 content-start ">
-                {products.map((p) => (
-                  <Card
-                    key={p.id}
-                    role="button"
-                    tabIndex={0}
-                    onClick={() => addToCart(p)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") {
-                        addToCart(p);
-                      }
-                    }}
-                    className="p-3 cursor-pointer border-zinc-200 hover:border-sky-400 hover:shadow-sm transition-colors hover:bg-sky-400"
-                  >
-                    <p
-                      className="text-sm font-medium text-zinc-900 truncate "
-                      title={p.item_description}
+                {products.map((p) => {
+                  const outOfStock = Number(p.available_quantity ?? 0) <= 0;
+
+                  return (
+                    <Card
+                      key={p.id}
+                      role="button"
+                      tabIndex={0}
+                      aria-disabled={outOfStock}
+                      onClick={() => addToCart(p)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          addToCart(p);
+                        }
+                      }}
+                      className={`p-3 border-zinc-200 transition-colors ${
+                        outOfStock
+                          ? "opacity-50 cursor-not-allowed"
+                          : "cursor-pointer hover:border-sky-400 hover:shadow-sm hover:bg-sky-400"
+                      }`}
                     >
-                      {p.item_description}
-                    </p>
-
-                    <p className="text-xs text-zinc-400 mb-2">{p.item_code}</p>
-
-                    <div className="flex items-center justify-between gap-2">
-                      <Badge
-                        variant="secondary"
-                        className="bg-zinc-100 text-zinc-600 hover:bg-zinc-100 truncate"
+                      <p
+                        className="text-sm font-medium text-zinc-900 truncate "
+                        title={p.item_description}
                       >
-                        {p.category}
-                      </Badge>
+                        {p.item_description}
+                      </p>
 
-                      <span className="text-sm font-semibold text-sky-600 whitespace-nowrap">
-                        {peso(p.selling_price)}
-                      </span>
-                    </div>
-                  </Card>
-                ))}
+                      <p className="text-xs text-zinc-400 mb-2">
+                        {p.item_code}
+                      </p>
+
+                      <div className="flex items-center justify-between gap-2">
+                        <Badge
+                          variant="secondary"
+                          className="bg-zinc-100 text-zinc-600 hover:bg-zinc-100 truncate"
+                        >
+                          {p.category}
+                        </Badge>
+
+                        <span className="text-sm font-semibold text-sky-600 whitespace-nowrap">
+                          {peso(p.selling_price)}
+                        </span>
+                      </div>
+
+                      {p.available_quantity != null && (
+                        <p
+                          className={`text-[10px] mt-1 ${
+                            outOfStock ? "text-red-500" : "text-zinc-400"
+                          }`}
+                        >
+                          {outOfStock
+                            ? "Out of stock"
+                            : `${p.available_quantity} left`}
+                        </p>
+                      )}
+                    </Card>
+                  );
+                })}
               </div>
             )}
           </div>
@@ -530,74 +601,87 @@ function Cashier() {
                 </p>
               </div>
             ) : (
-              cart.map((line) => (
-                <div
-                  key={line.item_code}
-                  className="flex flex-col gap-1 py-3 border-b border-zinc-100 last:border-b-0"
-                >
-                  {/* ITEM NAME + TOTAL */}
+              cart.map((line) => {
+                const atMax = line.qty >= line.available_quantity;
+                const overStock = line.qty > line.available_quantity;
 
-                  <div className="flex items-center justify-between gap-2">
-                    <p
-                      className="text-sm font-medium text-zinc-900 truncate"
-                      title={line.item_description}
-                    >
-                      {line.item_description}
-                    </p>
+                return (
+                  <div
+                    key={line.item_code}
+                    className="flex flex-col gap-1 py-3 border-b border-zinc-100 last:border-b-0"
+                  >
+                    {/* ITEM NAME + TOTAL */}
 
-                    <span className="text-sm font-semibold text-zinc-900 whitespace-nowrap">
-                      {peso(line.price * line.qty)}
-                    </span>
-                  </div>
-
-                  {/* PRICE + QUANTITY */}
-
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs text-zinc-400">
-                      {peso(line.price)} each
-                    </span>
-
-                    <div className="flex items-center gap-1">
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="icon"
-                        className="h-6 w-6"
-                        onClick={() => changeQty(line.item_code, -1)}
-                        aria-label="Decrease quantity"
+                    <div className="flex items-center justify-between gap-2">
+                      <p
+                        className="text-sm font-medium text-zinc-900 truncate"
+                        title={line.item_description}
                       >
-                        <Minus className="h-3 w-3" />
-                      </Button>
+                        {line.item_description}
+                      </p>
 
-                      <span className="text-xs w-5 text-center">
-                        {line.qty}
+                      <span className="text-sm font-semibold text-zinc-900 whitespace-nowrap">
+                        {peso(line.price * line.qty)}
+                      </span>
+                    </div>
+
+                    {/* PRICE + QUANTITY */}
+
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs text-zinc-400">
+                        {peso(line.price)} each
                       </span>
 
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="icon"
-                        className="h-6 w-6"
-                        onClick={() => changeQty(line.item_code, 1)}
-                        aria-label="Increase quantity"
-                      >
-                        <Plus className="h-3 w-3" />
-                      </Button>
+                      <div className="flex items-center gap-1">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="icon"
+                          className="h-6 w-6"
+                          onClick={() => changeQty(line.item_code, -1)}
+                          aria-label="Decrease quantity"
+                        >
+                          <Minus className="h-3 w-3" />
+                        </Button>
 
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        className="h-6 w-6 text-zinc-400 hover:text-red-600"
-                        onClick={() => removeLine(line.item_code)}
-                        aria-label="Remove line"
-                      >
-                        <Trash2 className="h-3 w-3" />
-                      </Button>
+                        <span className="text-xs w-5 text-center">
+                          {line.qty}
+                        </span>
+
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="icon"
+                          className="h-6 w-6"
+                          onClick={() => changeQty(line.item_code, 1)}
+                          disabled={atMax}
+                          aria-label="Increase quantity"
+                        >
+                          <Plus className="h-3 w-3" />
+                        </Button>
+
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="h-6 w-6 text-zinc-400 hover:text-red-600"
+                          onClick={() => removeLine(line.item_code)}
+                          aria-label="Remove line"
+                        >
+                          <Trash2 className="h-3 w-3" />
+                        </Button>
+                      </div>
                     </div>
+
+                    {overStock && (
+                      <p className="text-xs text-red-500">
+                        Only {line.available_quantity} in stock — reduce
+                        quantity to continue.
+                      </p>
+                    )}
                   </div>
-                </div>
-              ))
+                );
+              })
             )}
           </div>
 
@@ -661,7 +745,9 @@ function Cashier() {
 
             <Button
               type="button"
-              disabled={cart.length === 0 || cashAmount < total}
+              disabled={
+                cart.length === 0 || cashAmount < total || hasStockIssue
+              }
               onClick={stageCharge}
               className="w-full bg-sky-500 hover:bg-sky-600"
             >
