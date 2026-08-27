@@ -20,7 +20,10 @@ import React, { useState, useEffect, useMemo, useRef } from "react";
 
 import {
   usePosProductsQuery,
+  useTransactionQuery,
   useCreateTransactionMutation,
+  useUpdateTransactionMutation,
+  useDeleteRestoreTransactionMutation,
 } from "../Api/store";
 
 import ConfirmDialog from "../components/DialogBox/ConfirmDialog";
@@ -116,17 +119,14 @@ function Cashier() {
     setPage(1);
   }, [debouncedSearch, category]);
 
-  const {
-    data: productsData,
-    isFetching: isProductsFetching,
-    refetch: refetchProducts,
-  } = usePosProductsQuery({
-    status: "active",
-    search: debouncedSearch || undefined,
-    category: category || undefined,
-    page,
-    per_page: PAGE_SIZE,
-  });
+  const { data: productsData, isFetching: isProductsFetching } =
+    usePosProductsQuery({
+      status: "active",
+      search: debouncedSearch || undefined,
+      category: category || undefined,
+      page,
+      per_page: PAGE_SIZE,
+    });
 
   // Defensive extraction — adjust once you confirm your API's real
   // response shape via console.log(productsData). Handles both
@@ -153,12 +153,11 @@ function Cashier() {
   // Swap for a dedicated lightweight endpoint (e.g. GET /products/categories)
   // once available — this is the one remaining heavy call.
 
-  const { data: categoriesData, refetch: refetchCategories } =
-    usePosProductsQuery({
-      status: "active",
-      pagination: "none",
-      fields: "category",
-    });
+  const { data: categoriesData } = usePosProductsQuery({
+    status: "active",
+    pagination: "none",
+    fields: "category",
+  });
 
   const categories = useMemo(() => {
     const rows = Array.isArray(categoriesData?.data)
@@ -332,10 +331,6 @@ function Cashier() {
       notify("success", "Successfully Paid");
 
       clearCart();
-
-      // Refresh item list so available_quantity reflects this sale
-      refetchProducts();
-      refetchCategories();
     } catch (err) {
       const firstError = err?.data?.errors?.item_code;
       const message =
@@ -478,7 +473,7 @@ function Cashier() {
                       className={`p-3 border-zinc-200 transition-colors ${
                         outOfStock
                           ? "opacity-50 cursor-not-allowed"
-                          : "cursor-pointer hover:border-sky-400 hover:shadow-sm hover:bg-sky-400 hover:scale-103"
+                          : "cursor-pointer hover:border-sky-400 hover:shadow-sm hover:bg-sky-400"
                       }`}
                     >
                       <p

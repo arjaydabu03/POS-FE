@@ -16,7 +16,20 @@ export const POSAPI = createApi({
       headers.set("Accept", "application/json");
     },
   }),
-  tagTypes: ["User"], // enables cache invalidation between user endpoints
+  tagTypes: [
+    "User",
+    "Products",
+    "Miscellaneous",
+    "Receiving",
+    "Category",
+    "Uom",
+    "Supplier",
+    "MoveOrder",
+    "MiscellaneousIssue",
+    "TransactionModule",
+    "PosProducts",
+    "Inventory",
+  ], // enables cache invalidation between endpoints
   endpoints: (builder) => ({
     // Auth
     login: builder.mutation({
@@ -83,7 +96,9 @@ export const POSAPI = createApi({
         method: "POST",
         body, 
       }),
-      invalidatesTags: ["Products"],
+      // Adding/editing a product's stock or price should also refresh
+      // anywhere that shows on-hand quantity or is used at the register.
+      invalidatesTags: ["Products", "Inventory", "PosProducts"],
     }),
 
        updateProduct: builder.mutation({
@@ -92,14 +107,14 @@ export const POSAPI = createApi({
         method: "PUT",
         body,
       }),
-      invalidatesTags: ["Products"],
+      invalidatesTags: ["Products", "Inventory", "PosProducts"],
     }),
     deleteRestoreProduct: builder.mutation({
       query: (id) => ({
         url: `product/${id}`,
         method: "DELETE",
       }),
-      invalidatesTags: ["Products"],
+      invalidatesTags: ["Products", "Inventory", "PosProducts"],
     }),
      //miscellaneous module
 
@@ -153,7 +168,8 @@ export const POSAPI = createApi({
         method: "POST",
         body, 
       }),
-      invalidatesTags: ["Receiving"],
+      // Receiving stock in should refresh inventory/POS views too.
+      invalidatesTags: ["Receiving", "Inventory", "PosProducts"],
     }),
 
        updateReceiving: builder.mutation({
@@ -162,14 +178,14 @@ export const POSAPI = createApi({
         method: "PUT",
         body,
       }),
-      invalidatesTags: ["Receiving"],
+      invalidatesTags: ["Receiving", "Inventory", "PosProducts"],
     }),
     deleteRestoreReceiving: builder.mutation({
       query: (id) => ({
         url: `receiving/${id}`,
         method: "DELETE",
       }),
-      invalidatesTags: ["Receiving"],
+      invalidatesTags: ["Receiving", "Inventory", "PosProducts"],
     }),
    //Category module
 
@@ -293,7 +309,9 @@ export const POSAPI = createApi({
         method: "POST",
         body, 
       }),
-      invalidatesTags: ["MoveOrder"],
+      // A move order consumes stock-on-hand, so refresh the inventory
+      // (useMrpQuery / useGetMrpQuery) and POS product lists too.
+      invalidatesTags: ["MoveOrder", "Inventory", "PosProducts"],
     }),
 
        updateMoveOrder: builder.mutation({
@@ -302,14 +320,14 @@ export const POSAPI = createApi({
         method: "PUT",
         body,
       }),
-      invalidatesTags: ["MoveOrder"],
+      invalidatesTags: ["MoveOrder", "Inventory", "PosProducts"],
     }),
     deleteRestoreMoveOrder: builder.mutation({
       query: (id) => ({
         url: `move_order/${id}`,
         method: "DELETE",
       }),
-      invalidatesTags: ["MoveOrder"],
+      invalidatesTags: ["MoveOrder", "Inventory", "PosProducts"],
     }),
        //Miscellaneous Issue module
 
@@ -328,7 +346,8 @@ export const POSAPI = createApi({
         method: "POST",
         body, 
       }),
-      invalidatesTags: ["MiscellaneousIssue"],
+      // A miscellaneous issue also consumes stock-on-hand.
+      invalidatesTags: ["MiscellaneousIssue", "Inventory", "PosProducts"],
     }),
 
        updateMiscellaneousIssue: builder.mutation({
@@ -337,14 +356,14 @@ export const POSAPI = createApi({
         method: "PUT",
         body,
       }),
-      invalidatesTags: ["MiscellaneousIssue"],
+      invalidatesTags: ["MiscellaneousIssue", "Inventory", "PosProducts"],
     }),
     deleteRestoreMiscellaneousIssue: builder.mutation({
       query: (id) => ({
         url: `miscellaneous_issue/${id}`,
         method: "DELETE",
       }),
-      invalidatesTags: ["MiscellaneousIssue"],
+      invalidatesTags: ["MiscellaneousIssue", "Inventory", "PosProducts"],
     }),
  //Mrp module
 
@@ -374,7 +393,10 @@ export const POSAPI = createApi({
         method: "POST",
         body, 
       }),
-      invalidatesTags: ["TransactionModule"],
+      // A POS sale consumes stock-on-hand — refresh inventory and the
+      // cashier product grid (available_quantity) along with the
+      // transaction list.
+      invalidatesTags: ["TransactionModule", "Inventory", "PosProducts"],
     }),
 
        updateTransaction: builder.mutation({
@@ -383,14 +405,14 @@ export const POSAPI = createApi({
         method: "PUT",
         body,
       }),
-      invalidatesTags: ["TransactionModule"],
+      invalidatesTags: ["TransactionModule", "Inventory", "PosProducts"],
     }),
     deleteRestoreTransaction: builder.mutation({
       query: (id) => ({
         url: `transaction/${id}`,
         method: "DELETE",
       }),
-      invalidatesTags: ["TransactionModule"],
+      invalidatesTags: ["TransactionModule", "Inventory", "PosProducts"],
     }),
      posProducts: builder.query({
       query: (params) => ({
