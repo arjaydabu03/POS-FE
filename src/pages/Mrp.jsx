@@ -22,7 +22,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { Badge } from "@/components/ui/badge";
 import React, { useState, useEffect } from "react";
 
-import { useMrpQuery } from "../Api/store";
+import { useGetMrpQuery } from "../Api/store";
 
 function MrpDisplay() {
   const [page, setPage] = useState(1);
@@ -42,12 +42,13 @@ function MrpDisplay() {
     setPage(1);
   }, [debouncedSearch]);
 
-  const { data, isLoading, isFetching, isError, error, refetch } = useMrpQuery({
-    status: "active",
-    page,
-    per_page: 10,
-    search: debouncedSearch || undefined,
-  });
+  const { data, isLoading, isFetching, isError, error, refetch } =
+    useGetMrpQuery({
+      status: "active",
+      page,
+      per_page: 10,
+      search: debouncedSearch || undefined,
+    });
 
   // 👇 Pagination — adjust to match your actual response shape if it differs.
   const pagination = data?.data;

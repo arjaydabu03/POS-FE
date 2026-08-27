@@ -400,6 +400,14 @@ export const POSAPI = createApi({
       }),
       providesTags: ["PosProducts"],
     }),
+      getMrp: builder.query({
+      query: (params) => ({
+        url: "stock",
+        method: "GET",
+        params,
+      }),
+      providesTags: ["Inventory"],
+    }),
     
   }),
 
@@ -451,4 +459,5 @@ export const {
   useDeleteRestoreTransactionMutation,
   useMrpQuery,
   usePosProductsQuery,
+  useGetMrpQuery
 } = POSAPI;
