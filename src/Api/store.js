@@ -76,6 +76,7 @@ export const POSAPI = createApi({
       }),
       providesTags: ["Products"],
     }),
+   
 
      createProduct: builder.mutation({
       query: (body) => ({
@@ -392,8 +393,17 @@ export const POSAPI = createApi({
       }),
       invalidatesTags: ["TransactionModule"],
     }),
+     posProducts: builder.query({
+      query: (params) => ({
+        url: "cashier_pos",
+        method: "GET",
+        params,
+      }),
+      providesTags: ["PosProducts"],
+    }),
     
   }),
+  
 
   
 })
@@ -442,4 +452,5 @@ export const {
   useUpdateTransactionMutation,
   useDeleteRestoreTransactionMutation,
   useMrpQuery,
+  usePosProductsQuery
 } = POSAPI;
