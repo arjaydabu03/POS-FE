@@ -473,7 +473,7 @@ function Cashier() {
                       className={`p-3 border-zinc-200 transition-colors ${
                         outOfStock
                           ? "opacity-50 cursor-not-allowed"
-                          : "cursor-pointer hover:border-sky-400 hover:shadow-sm hover:bg-sky-400"
+                          : "cursor-pointer hover:border-sky-400 hover:shadow-sm hover:bg-sky-400 hover:scale-103"
                       }`}
                     >
                       <p
