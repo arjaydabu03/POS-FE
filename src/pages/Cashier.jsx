@@ -20,10 +20,7 @@ import React, { useState, useEffect, useMemo, useRef } from "react";
 
 import {
   usePosProductsQuery,
-  useTransactionQuery,
   useCreateTransactionMutation,
-  useUpdateTransactionMutation,
-  useDeleteRestoreTransactionMutation,
 } from "../Api/store";
 
 import ConfirmDialog from "../components/DialogBox/ConfirmDialog";

@@ -259,7 +259,7 @@ export default function Sidebar() {
               <ShoppingCart className="size-4" />
             </div>
             <span className="text-sm font-semibold tracking-tight">
-              Arjay Store
+              Astrid Store
             </span>
           </div>
         )}

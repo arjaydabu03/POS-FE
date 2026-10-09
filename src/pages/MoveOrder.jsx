@@ -112,6 +112,9 @@ function MoverOrder() {
   });
 
   // Item catalog used to populate the item picker in the form.
+  // Refreshed automatically whenever createMoveOrder succeeds, via
+  // RTK Query tag invalidation (see Api/store.js: getMrp providesTags
+  // ["Mrp"], createMoveOrder invalidatesTags ["Mrp"]).
   const { data: productsData, isFetching: isProductsFetching } = useMrpQuery({
     status: "active",
     pagination: "none",
