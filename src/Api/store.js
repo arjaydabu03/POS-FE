@@ -431,14 +431,7 @@ export const POSAPI = createApi({
       }),
       providesTags: ["Inventory"],
     }),
-     posProducts: builder.query({
-      query: (params) => ({
-        url: "cashier_pos",
-        method: "GET",
-        params,
-      }),
-      providesTags: ["PosProducts"],
-    }),
+
     
   }),
   

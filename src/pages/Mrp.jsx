@@ -22,7 +22,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { Badge } from "@/components/ui/badge";
 import React, { useState, useEffect } from "react";
 
-import { useGetMrpQuery } from "../Api/store";
+import { useMrpQuery } from "../Api/store";
 
 function MrpDisplay() {
   const [page, setPage] = useState(1);
@@ -43,7 +43,7 @@ function MrpDisplay() {
   }, [debouncedSearch]);
 
   const { data, isLoading, isFetching, isError, error, refetch } =
-    useGetMrpQuery({
+    useMrpQuery({
       status: "active",
       page,
       per_page: 10,
